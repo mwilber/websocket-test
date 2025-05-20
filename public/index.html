@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebSocket Reverse Demo</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    #output { margin-top: 1em; padding: 1em; border: 1px solid #ccc; min-height: 2em; }
+    #status { margin-bottom: 1em; }
+  </style>
+</head>
+<body>
+  <h1>WebSocket Reverse Demo</h1>
+  <div id="status">Connecting...</div>
+  <button id="connectBtn">Connect</button>
+  <button id="disconnectBtn" disabled>Disconnect</button>
+  <input type="text" id="inputText" placeholder="Enter text" />
+  <button id="submitBtn">Submit</button>
+  <div id="output" aria-label="output"></div>
+  <script>
+    let ws;
+    const statusDiv = document.getElementById('status');
+    const outputDiv = document.getElementById('output');
+    const input = document.getElementById('inputText');
+    const button = document.getElementById('submitBtn');
+    const connectBtn = document.getElementById('connectBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+
+    function setConnected(connected) {
+      connectBtn.disabled = connected;
+      disconnectBtn.disabled = !connected;
+      button.disabled = !connected;
+      input.disabled = !connected;
+    }
+
+    function connect() {
+      ws = new WebSocket('ws://' + window.location.hostname + ':8080');
+      ws.onopen = () => {
+        statusDiv.textContent = 'Connected';
+        statusDiv.style.color = 'green';
+        setConnected(true);
+      };
+      ws.onclose = () => {
+        statusDiv.textContent = 'Disconnected.';
+        statusDiv.style.color = 'red';
+        setConnected(false);
+      };
+      ws.onerror = (err) => {
+        statusDiv.textContent = 'Error connecting to server.';
+        statusDiv.style.color = 'red';
+        setConnected(false);
+      };
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'random') {
+            outputDiv.textContent = 'Random number: ' + data.value;
+          } else if (data.type === 'reverse') {
+            outputDiv.textContent = 'Reversed: ' + data.value;
+          }
+        } catch (e) {
+          outputDiv.textContent = event.data;
+        }
+      };
+    }
+
+    function disconnect() {
+      if (ws) {
+        ws.close();
+        ws = null;
+      }
+    }
+
+    button.onclick = () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(input.value);
+      }
+    };
+
+    input.addEventListener('keyup', function(event) {
+      if (event.key === 'Enter') {
+        button.click();
+      }
+    });
+
+    connectBtn.onclick = () => {
+      if (!ws || ws.readyState === WebSocket.CLOSED) {
+        connect();
+      }
+    };
+
+    disconnectBtn.onclick = () => {
+      disconnect();
+    };
+
+    setConnected(false);
+  </script>
+</body>
+</html> 
