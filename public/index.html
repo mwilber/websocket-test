@@ -15,6 +15,7 @@
   <div id="status">Connecting...</div>
   <button id="connectBtn">Connect</button>
   <button id="disconnectBtn" disabled>Disconnect</button>
+  <button id="simulateMcpBtn">Simulate MCP</button>
   <input type="text" id="inputText" placeholder="Enter text" />
   <button id="submitBtn">Submit</button>
   <div id="output" aria-label="output"></div>
@@ -26,12 +27,14 @@
     const button = document.getElementById('submitBtn');
     const connectBtn = document.getElementById('connectBtn');
     const disconnectBtn = document.getElementById('disconnectBtn');
+    const simulateMcpBtn = document.getElementById('simulateMcpBtn');
 
     function setConnected(connected) {
       connectBtn.disabled = connected;
       disconnectBtn.disabled = !connected;
       button.disabled = !connected;
       input.disabled = !connected;
+      simulateMcpBtn.disabled = !connected;
     }
 
     function connect() {
@@ -58,6 +61,15 @@
             outputDiv.textContent = 'Random number: ' + data.value;
           } else if (data.type === 'reverse') {
             outputDiv.textContent = 'Reversed: ' + data.value;
+          } else if (data.type === 'getSeriesInfo') {
+            // Respond to server's getSeriesInfo request
+            ws.send(JSON.stringify({
+              type: 'seriesInfoResponse',
+              requestId: data.requestId,
+              value: { test: 'This is a test response from client.' }
+            }));
+          } else if (data.type === 'mcpResult') {
+            outputDiv.textContent = 'MCP Result: ' + JSON.stringify(data.value);
           }
         } catch (e) {
           outputDiv.textContent = event.data;
@@ -92,6 +104,12 @@
 
     disconnectBtn.onclick = () => {
       disconnect();
+    };
+
+    simulateMcpBtn.onclick = () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'simulateMcp' }));
+      }
     };
 
     setConnected(false);
