@@ -2,31 +2,34 @@ const WebSocket = require('ws');
 
 const wss = new WebSocket.Server({ port: 8080 });
 
-// Store all connections and pending requests
-const clients = new Set();
-const pendingRequests = new Map();
+// Store all connections by sessionId and pending requests
+const clients = new Map(); // sessionId -> ws
+const pendingRequests = new Map(); // requestId -> { resolve, timeout, sessionId }
 
 function sendMessage(ws) {
 	const randomNumber = Math.floor(Math.random() * 1001);
 	ws.send(JSON.stringify({ type: 'random', value: randomNumber }));
 }
 
-function getSeriesInfo(ws) {
+function getSeriesInfo(sessionId) {
 	return new Promise((resolve, reject) => {
+		const ws = clients.get(sessionId);
+		if (!ws) return reject(new Error('No client for sessionId'));
 		const requestId = Math.random().toString(36).substr(2, 9);
 		const timeout = setTimeout(() => {
 			pendingRequests.delete(requestId);
 			reject(new Error('Timeout waiting for client response'));
 		}, 10000); // 10s timeout
-		pendingRequests.set(requestId, { resolve, timeout });
+		pendingRequests.set(requestId, { resolve, timeout, sessionId });
 		ws.send(JSON.stringify({ type: 'getSeriesInfo', requestId }));
 	});
 }
 
-async function simulateMcp(ws) {
+async function simulateMcp(sessionId) {
+	const ws = clients.get(sessionId);
+	if (!ws) return;
 	try {
-		const response = await getSeriesInfo(ws);
-		// Send the response to the client to display in the output div
+		const response = await getSeriesInfo(sessionId);
 		ws.send(JSON.stringify({ type: 'mcpResult', value: response }));
 	} catch (err) {
 		ws.send(JSON.stringify({ type: 'mcpResult', value: { error: err.message } }));
@@ -34,9 +37,8 @@ async function simulateMcp(ws) {
 }
 
 wss.on('connection', function connection(ws) {
-	clients.add(ws);
-	// Send a random number every 5 seconds
-	const interval = setInterval(() => sendMessage(ws), 5000);
+	let sessionId = null;
+	let interval = null;
 
 	ws.on('message', function incoming(message) {
 		let data;
@@ -48,9 +50,19 @@ wss.on('connection', function connection(ws) {
 			ws.send(JSON.stringify({ type: 'reverse', value: reversed }));
 			return;
 		}
+
+		// Handle initial sessionId registration
+		if (data.type === 'registerSession' && typeof data.sessionId === 'string') {
+			sessionId = data.sessionId;
+			clients.set(sessionId, ws);
+			// Start random number interval for this client
+			interval = setInterval(() => sendMessage(ws), 5000);
+			return;
+		}
+
 		// Handle response to getSeriesInfo
 		if (data.type === 'seriesInfoResponse' && data.requestId && pendingRequests.has(data.requestId)) {
-			const { resolve, timeout } = pendingRequests.get(data.requestId);
+			const { resolve, timeout, sessionId: reqSessionId } = pendingRequests.get(data.requestId);
 			clearTimeout(timeout);
 			pendingRequests.delete(data.requestId);
 			resolve(data.value);
@@ -58,7 +70,7 @@ wss.on('connection', function connection(ws) {
 		}
 		// Handle simulateMcp trigger from client
 		if (data.type === 'simulateMcp') {
-			simulateMcp(ws);
+			if (sessionId) simulateMcp(sessionId);
 			return;
 		}
 		// Fallback: reverse logic for other messages
@@ -69,8 +81,12 @@ wss.on('connection', function connection(ws) {
 	});
 
 	ws.on('close', () => {
-		clients.delete(ws);
-		clearInterval(interval);
+		if (sessionId) {
+			clients.delete(sessionId);
+		}
+		if (interval) {
+			clearInterval(interval);
+		}
 	});
 });
 

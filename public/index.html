@@ -21,6 +21,7 @@
   <div id="output" aria-label="output"></div>
   <script>
     let ws;
+    let sessionId = null;
     const statusDiv = document.getElementById('status');
     const outputDiv = document.getElementById('output');
     const input = document.getElementById('inputText');
@@ -38,11 +39,14 @@
     }
 
     function connect() {
+      sessionId = 'session-' + Math.floor(Math.random() * 1000000);
       ws = new WebSocket('ws://' + window.location.hostname + ':8080');
       ws.onopen = () => {
         statusDiv.textContent = 'Connected';
         statusDiv.style.color = 'green';
         setConnected(true);
+        // Register sessionId with the server
+        ws.send(JSON.stringify({ type: 'registerSession', sessionId }));
       };
       ws.onclose = () => {
         statusDiv.textContent = 'Disconnected.';
